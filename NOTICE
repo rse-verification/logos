@@ -1,0 +1,14 @@
+LOGOS licensing scope
+=====================
+
+LOGOS's original software is licensed under the GNU General Public License,
+version 2 only (SPDX-License-Identifier: GPL-2.0-only). See LICENSE for the
+complete terms. Copyright remains with the respective copyright holders.
+
+Separately owned source inputs, case-study material, and third-party content
+retain their existing rights and notices. The LOGOS license does not grant
+additional rights to that material.
+
+External tools and dependencies retain their own licenses. This notice does
+not change the licenses of programs analyzed by LOGOS or automatically apply
+GPL to generated contracts or reports merely because LOGOS produced them.

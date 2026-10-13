@@ -1,0 +1,37 @@
+name: Windows compatibility
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Check runner LLVM installation and automatic discovery
+        shell: pwsh
+        run: |
+          $library = Join-Path $env:ProgramFiles 'LLVM\bin\libclang.dll'
+          if (!(Test-Path $library)) { throw "Runner LLVM library missing: $library" }
+          & (Join-Path $env:ProgramFiles 'LLVM\bin\clang.exe') --version
+          $env:PYTHONPATH = 'skill/scripts'
+          python -c "from acsl_tool.parser import _load_libclang; print('Loaded:', _load_libclang()._name)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run full suite with automatic discovery
+        run: python -m unittest discover -s tests -v
+      - name: Run full suite with explicit DLL path
+        shell: pwsh
+        run: |
+          $env:LIBCLANG_FILE = Join-Path $env:ProgramFiles 'LLVM\bin\libclang.dll'
+          python -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

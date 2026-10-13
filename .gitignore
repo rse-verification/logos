@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+
+results/
+
+# Keep external input programs and generated research artifacts out of Git.
+/src/
+/input/
+/contracts/
+/case_study/
+/manuscript/
+/presentation/
