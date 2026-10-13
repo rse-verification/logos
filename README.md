@@ -138,7 +138,7 @@ python3 skill/scripts/generate_acsl.py input/main.c -o results/main.annotated.c 
 
 ## AutoDeduct Integration
 
-LOGOS implements the skill interface used by AutoDeduct's [`codex/llm-skill-mode` branch](https://github.com/rse-verification/auto-deduct/tree/codex/llm-skill-mode). Point `AUTODEDUCT_LLM_SKILL` at the absolute path of `skill/SKILL.md`; global skill installation is unnecessary when AutoDeduct supplies this path. The complete skill directory, Python, libclang, Frama-C WP, and configured provers must be available to the runner.
+LOGOS implements the skill interface used by AutoDeduct's [`llm-skill-mode` branch](https://github.com/rse-verification/auto-deduct/tree/llm-skill-mode). Point `AUTODEDUCT_LLM_SKILL` at the absolute path of `skill/SKILL.md`; global skill installation is unnecessary when AutoDeduct supplies this path. The complete skill directory, Python, libclang, Frama-C WP, and configured provers must be available to the runner.
 
 The wrapper accepts repeated `--frama-c-option=VALUE` arguments and writes process evidence with `--verification-json FILE` (requires `--verify`):
 
