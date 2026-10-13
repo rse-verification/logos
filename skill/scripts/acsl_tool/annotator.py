@@ -6,7 +6,7 @@ import pathlib
 
 from .contracts import normalize_contract
 from .models import AnnotationResult, FunctionAnalysis
-from .parser import extract_functions, has_acsl, has_preceding_acsl, strip_trailing_noise
+from .parser import extract_functions, has_acsl, strip_trailing_noise
 
 
 def cleanup_legacy_llm_artifacts(output_path: pathlib.Path) -> None:
@@ -42,7 +42,7 @@ def annotate_source(
     functions = extract_functions(cleaned)
     function_names = {function.name for function in functions}
     documented_function_names = {
-        function.name for function in functions if has_preceding_acsl(cleaned, function.start)
+        function.name for function in functions if function.has_existing_acsl
     }
     override_names = set(contract_overrides)
     unknown_overrides = sorted(name for name in override_names if name not in function_names)

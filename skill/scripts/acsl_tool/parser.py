@@ -363,17 +363,26 @@ def extract_functions(source: str) -> list[FunctionDef]:
 
         functions: list[FunctionDef] = []
         root = lib.clang_getTranslationUnitCursor(translation_unit)
-        for cursor in _visit_children(lib, root):
-            if _cursor_kind_name(lib, cursor) != "FunctionDecl":
-                continue
+        declarations = [cursor for cursor in _visit_children(lib, root)
+                        if _cursor_kind_name(lib, cursor) == "FunctionDecl"]
+
+        def text_offset(cursor: CXCursor) -> int:
+            # Clang reports UTF-8 byte offsets; Python slices use character offsets.
+            return len(contents[:_cursor_start_offset(lib, cursor)].decode("utf-8"))
+
+        documented_names = {
+            _cursor_spelling(lib, cursor) for cursor in declarations
+            if has_preceding_acsl(source, text_offset(cursor))
+        }
+        for cursor in declarations:
             compound_stmt = next(
                 (child for child in _visit_children(lib, cursor) if _cursor_kind_name(lib, child) == "CompoundStmt"),
                 None,
             )
             if compound_stmt is None:
                 continue
-            start = _cursor_start_offset(lib, cursor)
-            brace_start = _cursor_start_offset(lib, compound_stmt)
+            start = text_offset(cursor)
+            brace_start = text_offset(compound_stmt)
             end = find_matching_brace(source, brace_start)
             functions.append(
                 FunctionDef(
@@ -385,6 +394,7 @@ def extract_functions(source: str) -> list[FunctionDef]:
                     brace_start=brace_start,
                     end=end,
                     body=source[brace_start:end],
+                    has_existing_acsl=_cursor_spelling(lib, cursor) in documented_names,
                 )
             )
         return functions
@@ -395,13 +405,19 @@ def extract_functions(source: str) -> list[FunctionDef]:
 
 
 def has_preceding_acsl(source: str, function_start: int) -> bool:
-    prefix = source[:function_start]
-    return bool(re.search(r"/\*@[\s\S]*?\*/\s*$", prefix))
+    annotation = extract_preceding_acsl(source, function_start)
+    if annotation is None:
+        return False
+    annotation = re.sub(r"//[^\n]*", "", annotation)
+    return bool(re.search(
+        r"\b(?:requires|ensures|assigns|allocates|frees|terminates|decreases|behavior|complete|disjoint)\b",
+        annotation,
+    ))
 
 
 def extract_preceding_acsl(source: str, function_start: int) -> str | None:
     prefix = source[:function_start]
-    match = re.search(r"(/\*@[\s\S]*?\*/)\s*$", prefix)
+    match = re.search(r"(/\*@(?:(?!\*/)[\s\S])*\*/)\s*$", prefix)
     if match is None:
         return None
     return match.group(1)

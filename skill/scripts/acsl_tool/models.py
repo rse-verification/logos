@@ -16,6 +16,7 @@ class FunctionDef:
     brace_start: int
     end: int
     body: str
+    has_existing_acsl: bool = False
 
 
 @dataclass
