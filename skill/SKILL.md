@@ -13,6 +13,9 @@ Use this skill when:
 
 ## Prerequisites
 
+- When AutoDeduct sets `workflow: "generate-only"` in its task, the host agent
+  only reads the source and writes contract JSON. Python/libclang/Frama-C are
+  wrapper dependencies and may live inside AutoDeduct's verifier container.
 - Python 3 and the libclang shared library are required. The `clang` executable alone is insufficient; Python loads libclang directly without additional Python bindings.
 - macOS: install Apple Command Line Tools with `xcode-select --install`, or LLVM with `brew install llvm`. Standard Apple and Homebrew library paths are detected automatically.
 - Debian/Ubuntu: install `libclang-dev` with `sudo apt install libclang-dev`.
@@ -37,6 +40,23 @@ Use this skill when:
 ## AutoDeduct Integration
 
 When AutoDeduct supplies `llm-task.json`, read its absolute artifact paths and use them instead of the default `contracts/` and `results/` paths. Invoke `scripts/generate_acsl.py` relative to this SKILL.md's directory, even when the working directory is the task output directory.
+
+For tasks with `workflow: "generate-only"`:
+
+1. Read the source and existing ACSL; author contracts for undocumented functions.
+2. Write only the specified `contracts` JSON, including `metadata.source_sha256`
+   computed from Python's UTF-8 source text as described below.
+3. Stop after generation. AutoDeduct runs the Python wrapper and verification;
+   do not invoke the wrapper, Docker, or Frama-C, or write annotated source or
+   verification JSON. Report generation issues accurately in your final message.
+
+The supported AutoDeduct launcher runs Codex on the host. Its `local` runtime
+executes the wrapper locally; its `docker` runtime executes the wrapper and
+Frama-C/provers in a container without Codex or login credentials. Running
+AutoDeduct's Codex workflow inside a container is unsupported.
+
+For older tasks without `workflow: "generate-only"`, follow the complete
+workflow below. Standalone interactive use also retains the default flow.
 
 - Include `metadata.source_sha256` computed from the UTF-8 source text read by Python (`Path(source).read_text(encoding="utf-8").encode("utf-8")`).
 - Author structured function contracts, then run the wrapper with the task's `source`, `--contracts`, `-o`, `--verify`, and `--verification-json` paths.
