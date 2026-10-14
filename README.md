@@ -17,11 +17,17 @@ directories and are not distributed in this repository.
 
 ## Choose a Workflow
 
+For AutoDeduct integration, start with the
+[AutoDeduct LLM branch](https://github.com/rse-verification/auto-deduct/tree/llm-skill-mode)
+and its [setup and usage guide](https://github.com/rse-verification/auto-deduct/blob/llm-skill-mode/docs/LLM.md).
+AutoDeduct calls LOGOS to generate contracts, apply them, verify with Frama-C,
+and consume the verification report.
+
 | Workflow | How it runs | Guide |
 |---|---|---|
+| [AutoDeduct LLM with local tools](https://github.com/rse-verification/auto-deduct/tree/llm-skill-mode) | Host Codex uses the local LOGOS skill; AutoDeduct runs the wrapper and Frama-C locally | [AutoDeduct local setup](https://github.com/rse-verification/auto-deduct/blob/llm-skill-mode/docs/LLM.md#local-verification-dependencies) |
+| [AutoDeduct LLM with Docker verification](https://github.com/rse-verification/auto-deduct/tree/llm-skill-mode) | AutoDeduct extracts the image's skill for host Codex, then runs the wrapper and Frama-C in Docker | [AutoDeduct Docker setup](https://github.com/rse-verification/auto-deduct/blob/llm-skill-mode/docs/LLM.md#run-with-docker-verification) |
 | Standalone LOGOS | Ask Codex to author contracts, then apply and optionally verify them with the local wrapper | [Standalone usage](docs/USAGE.md) |
-| AutoDeduct with local tools | Host Codex generates JSON; AutoDeduct runs the wrapper and Frama-C locally | [AutoDeduct integration](docs/AUTODEDUCT.md) |
-| AutoDeduct with Docker verification | Host Codex generates JSON; AutoDeduct runs the wrapper and Frama-C in Docker | [AutoDeduct integration](docs/AUTODEDUCT.md) |
 
 AutoDeduct's LLM workflow runs Codex on the host. Running Codex inside its
 container is unsupported. Docker is optional when verification dependencies are

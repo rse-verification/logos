@@ -5,7 +5,10 @@
 Choose [standalone usage](USAGE.md) or [AutoDeduct integration](AUTODEDUCT.md)
 before installing dependencies. AutoDeduct's Docker runtime supplies the wrapper
 dependencies in its verifier image; the host still needs Python, authenticated
-Codex CLI, AutoDeduct, and a readable LOGOS skill checkout.
+Codex CLI, AutoDeduct, and Docker. The launcher extracts the skill from the
+prepared verifier image for the host agent. A local LOGOS checkout is required
+for standalone use and AutoDeduct's local runtime; it is unnecessary when
+running AutoDeduct with an already prepared Docker image.
 
 ## Standalone and Local Verification Requirements
 
@@ -111,4 +114,9 @@ An agent must actually read [SKILL.md](../skill/SKILL.md) to follow its workflow
 having the repository on disk alone does not activate it. You can install the
 skill in your agent's skill directory or give the agent its full path explicitly.
 AutoDeduct supplies that path through `--llm-skill` or `AUTODEDUCT_LLM_SKILL`, so
-global skill installation is unnecessary for that integration.
+global skill installation is unnecessary for its local runtime. Its Docker
+runtime extracts `/opt/logos/skill/SKILL.md` from the selected image into a
+temporary host cache and uses the same pinned image for verification.
+`--llm-skill` and a separate local LOGOS checkout are unnecessary for Docker
+execution. Building the image from source still needs the LOGOS checkout as
+the build context; see [AutoDeduct integration](AUTODEDUCT.md).

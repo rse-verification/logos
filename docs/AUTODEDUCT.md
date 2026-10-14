@@ -19,7 +19,7 @@ covers the traditional toolchain.
 |---|---|---|
 | Host Python and AutoDeduct launcher | Required | Required |
 | Host Codex CLI and login | Required | Required |
-| Readable LOGOS skill checkout on host | Required | Required |
+| Local LOGOS checkout and skill path | Required | Skill extracted from verifier image |
 | Wrapper, libclang, Frama-C/WP, and provers | Installed on host | Packaged in verifier image |
 | Docker | Unnecessary | Required |
 
@@ -42,12 +42,22 @@ For Docker verification:
 
 ```bash
 ./bin/autodeduct llm --llm-runtime docker \
-  --llm-skill /absolute/path/to/logos/skill/SKILL.md \
   --output-dir /project/results/autodeduct /project/input/program.c
 ```
 
-You can set `AUTODEDUCT_LLM_SKILL` to the absolute skill path instead of repeating
-`--llm-skill`. Global skill installation is unnecessary.
+For local verification, you can set `AUTODEDUCT_LLM_SKILL` to the absolute skill
+path instead of repeating `--llm-skill`. Global skill installation is unnecessary.
+
+Docker verification uses the skill packaged at `/opt/logos/skill/SKILL.md` in
+the prepared image. AutoDeduct resolves the image to an immutable image ID,
+extracts its skill into a temporary host cache, and gives that path to Codex.
+The wrapper runs from the same image ID. Users of a prepared image need no
+local LOGOS checkout or `--llm-skill` flag.
+
+Building that image from source still requires a LOGOS checkout as the named
+Docker build context. This is a build requirement, separate from the runtime
+requirements of someone using an already prepared image. Follow
+[AutoDeduct's image build instructions](https://github.com/rse-verification/auto-deduct/blob/llm-skill-mode/docs/LLM.md#build-the-verifier-image).
 
 ## Why the Launcher Runs on the Host
 
@@ -62,14 +72,15 @@ introduced container authentication setup. The supported verifier image has no
 Codex installation or model credentials and runs without network access.
 
 Docker mode supports Linux/macOS and Windows through WSL. Native Windows
-Frama-C verification is not validated. Keep the host skill and container wrapper
-on the compatible LOGOS revision specified by AutoDeduct's setup guide.
+Frama-C verification is not validated. The extracted skill and wrapper come
+from the same pinned image; use a compatible image from AutoDeduct's setup guide.
 
 ## The Contract and Report Handoff
 
-1. AutoDeduct writes `llm-task.json` with source/output paths, verification
-   options, and `workflow: "generate-only"`.
-2. Host Codex reads the LOGOS skill and source, then writes
+1. AutoDeduct selects the local skill or extracts the Docker image's skill,
+   checks verification dependencies, and writes `llm-task.json` with
+   source/output paths, verification options, and `workflow: "generate-only"`.
+2. Host Codex reads the selected LOGOS skill and source, then writes
    `llm-contracts.json`, including the source hash. It stops after generation.
 3. AutoDeduct checks that handoff, then explicitly invokes
    `skill/scripts/generate_acsl.py` with the contracts, annotated output path,
@@ -82,6 +93,9 @@ on the compatible LOGOS revision specified by AutoDeduct's setup guide.
 The LLM writes contract JSON. The wrapper writes verification evidence. The
 text/PDF reports support human review; AutoDeduct consumes the JSON evidence.
 Generating contract JSON alone is insufficient for a successful verification.
+
+Docker runs retain an `llm-skill.md` snapshot for review. The recorded image ID
+and skill hash identify the packaged instructions and verifier used for that run.
 
 Standalone LOGOS and older tasks without the generation-only marker retain the
 skill's complete generation, annotation, and optional verification workflow.
