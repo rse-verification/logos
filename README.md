@@ -138,7 +138,37 @@ python3 skill/scripts/generate_acsl.py input/main.c -o results/main.annotated.c 
 
 ## AutoDeduct Integration
 
-LOGOS implements the skill interface used by AutoDeduct's [`llm-skill-mode` branch](https://github.com/rse-verification/auto-deduct/tree/llm-skill-mode). Point `AUTODEDUCT_LLM_SKILL` at the absolute path of `skill/SKILL.md`; global skill installation is unnecessary when AutoDeduct supplies this path. The complete skill directory, Python, libclang, Frama-C WP, and configured provers must be available to the runner.
+LOGOS implements the skill interface used by AutoDeduct's [`llm-skill-mode` branch](https://github.com/rse-verification/auto-deduct/tree/llm-skill-mode). Point `AUTODEDUCT_LLM_SKILL` at the absolute path of `skill/SKILL.md`; global skill installation is unnecessary when AutoDeduct supplies this path.
+
+AutoDeduct is the host launcher. It runs authenticated Codex locally with a
+`workflow: "generate-only"` task; Codex writes contract JSON and stops.
+AutoDeduct then invokes this repository's Python wrapper, checks the resulting
+source and proof evidence, and writes its final report. The model does not
+launch verification or write the verification report.
+
+```shell
+# Host Python, Codex, libclang, Frama-C/WP and provers installed locally:
+autodeduct llm --llm-runtime local \
+  --llm-skill /absolute/path/to/logos/skill/SKILL.md path/to/program.c
+
+# Host Python and authenticated Codex; LOGOS wrapper and tools in Docker:
+autodeduct llm --llm-runtime docker \
+  --llm-skill /absolute/path/to/logos/skill/SKILL.md path/to/program.c
+```
+
+Docker is optional. With Docker, build AutoDeduct's `auto-deduct:logos` image
+from this checkout, then invoke the launcher on the host. The container includes
+Python, libclang, the LOGOS wrapper, Frama-C/WP and provers. It contains no Codex
+installation or login credentials. Inputs/headers are mounted read-only, outputs
+are writable, and the verifier container has no network access. Host libclang or
+Frama-C installations are unnecessary for this runtime. Running Codex inside a
+container is unsupported by this integration. Docker mode supports Linux/macOS
+and Windows through WSL; native Windows Frama-C verification is not validated.
+See AutoDeduct's [setup instructions](https://github.com/rse-verification/auto-deduct/blob/llm-skill-mode/docs/INSTALLATION.md#logos-for-llm-mode).
+
+Standalone LOGOS usage still requires local Python and libclang, and local
+Frama-C/WP with provers when verification is requested. Older AutoDeduct tasks
+without the generation-only marker retain the skill's full workflow.
 
 The wrapper accepts repeated `--frama-c-option=VALUE` arguments and writes process evidence with `--verification-json FILE` (requires `--verify`):
 
