@@ -1,5 +1,11 @@
 # LOGOS: LLM-Based Generation of Function Contracts for C
 
+![LOGOS — logical specifications of function behavior](docs/assets/logos-banner.png)
+
+**LOGOS** takes its name from the Greek [λόγος (*logos*)](https://logeion.uchicago.edu/%CE%BB%CF%8C%CE%B3%CE%BF%CF%82),
+meaning “reason” or “account.” The name reflects its purpose: generating logical
+specifications of function behavior as ACSL contracts for C.
+
 LOGOS provides a skill for authoring ACSL function contracts and a Python wrapper
 that inserts those contracts into C source and optionally verifies the result
 with Frama-C WP. The agent decides contract semantics; the wrapper handles
