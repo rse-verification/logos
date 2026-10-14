@@ -15,9 +15,10 @@ from .models import VerificationReport
 
 
 def parse_metric(output: str, pattern: str) -> str | None:
-    match = re.search(pattern, output, flags=re.MULTILINE)
-    if not match:
+    matches = list(re.finditer(pattern, output, flags=re.MULTILINE))
+    if not matches:
         return None
+    match = matches[-1]
     return " ".join(part for part in match.groups() if part is not None).strip()
 
 

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import shutil
 import sys
 
 from .annotator import annotate_source, cleanup_legacy_llm_artifacts, format_analysis_summary, print_generation_summary
 from .contracts import load_contracts, validate_contract_bundle
+from .parser import _load_libclang
 from .verification import run_framac_wp
 
 
@@ -15,9 +17,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Insert ACSL contracts into C source and optionally verify them with Frama-C WP."
     )
-    parser.add_argument("input", type=pathlib.Path, help="Input C source file")
-    parser.add_argument("-o", "--output", type=pathlib.Path, help="Output file path")
+    parser.add_argument("input", nargs="?", type=pathlib.Path, help="Input C source file")
     parser.add_argument(
+        "--check-dependencies", action="store_true",
+        help="Check libclang and Frama-C availability without generating files",
+    )
+    destination = parser.add_mutually_exclusive_group()
+    destination.add_argument("-o", "--output", type=pathlib.Path, help="Output file path")
+    destination.add_argument(
         "--in-place",
         action="store_true",
         help="Rewrite the input file instead of writing into results/<file>.annotated.c",
@@ -57,6 +64,8 @@ def parse_args() -> argparse.Namespace:
         help="Print a per-function summary of how contracts were chosen",
     )
     args = parser.parse_args()
+    if not args.check_dependencies and args.input is None:
+        parser.error("input is required unless --check-dependencies is used")
     if args.verification_json and not args.verify:
         parser.error("--verification-json requires --verify")
     return args
@@ -81,15 +90,52 @@ def ask_to_verify() -> bool:
     return answer in {"y", "yes"}
 
 
+def paths_collide(left: pathlib.Path, right: pathlib.Path) -> bool:
+    return left.resolve() == right.resolve() or (
+        left.exists() and right.exists() and left.samefile(right)
+    )
+
+
+def validate_artifact_paths(args: argparse.Namespace, output_path: pathlib.Path) -> None:
+    protected = [("input source", args.input)]
+    if args.contracts is not None:
+        protected.append(("contracts file", args.contracts))
+    artifacts = [
+        ("output", output_path),
+        ("text report", output_path.with_suffix(".wp-report.txt")),
+        ("PDF report", output_path.with_suffix(".wp-report.pdf")),
+    ]
+    if args.verification_json is not None:
+        artifacts.append(("--verification-json", args.verification_json))
+    seen: list[tuple[str, pathlib.Path]] = []
+    for name, path in artifacts:
+        for protected_name, protected_path in protected:
+            in_place_source = name == "output" and args.in_place and protected_name == "input source"
+            if paths_collide(path, protected_path) and not in_place_source:
+                raise ValueError(f"{name} must be separate from {protected_name}; use --in-place to overwrite the input source")
+        for previous_name, previous_path in seen:
+            if paths_collide(path, previous_path):
+                raise ValueError(f"{name} must be separate from {previous_name}")
+        seen.append((name, path))
+    for suffix in (".llm-prompt.md", ".llm-context.json", ".llm-contracts.template.json"):
+        legacy_path = output_path.with_suffix(suffix)
+        if any(paths_collide(legacy_path, path) for _, path in [*protected, *seen]):
+            raise ValueError("legacy artifact cleanup must not delete source, contracts, or current artifacts")
+
+
 def main() -> int:
     args = parse_args()
+    if args.check_dependencies:
+        _load_libclang()
+        framac = shutil.which("frama-c")
+        if framac is None:
+            raise RuntimeError("Frama-C was not found in PATH; install Frama-C with WP and configure its provers")
+        print(f"Dependencies available: libclang and {framac}")
+        return 0
     source = args.input.read_text(encoding="utf-8")
     output_path = resolve_output_path(args)
+    validate_artifact_paths(args, output_path)
     if args.verification_json:
-        reserved = (args.input, output_path, output_path.with_suffix(".wp-report.txt"),
-                    output_path.with_suffix(".wp-report.pdf"), args.contracts)
-        if args.verification_json.resolve() in {p.resolve() for p in reserved if p is not None}:
-            raise ValueError("--verification-json must be separate from source, contracts, and report files")
         args.verification_json.unlink(missing_ok=True)
     bundle = load_contracts(args.contracts)
     for warning in validate_contract_bundle(bundle, args.input, source):

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import contextlib
+import io
 import pathlib
 import subprocess
 import sys
@@ -12,11 +14,41 @@ from unittest import mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skill/scripts"))
 
-from acsl_tool.parser import extract_functions, strip_trailing_noise
+from acsl_tool.parser import extract_functions
 from acsl_tool import parser
+from acsl_tool import cli
 
 
 class ParserTest(unittest.TestCase):
+    def test_header_function_offsets_are_not_applied_to_main_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            header = pathlib.Path(tmpdir) / "helper.h"
+            header.write_text("static inline int header_helper(void) { return 1; }\n")
+            source = f'#include "{header.as_posix()}"\n'
+            source += "/*@ ensures \\result == 0; */\nint main(void) { return 0; }\n"
+            functions = extract_functions(source)
+            self.assertEqual([function.name for function in functions], ["main"])
+            self.assertTrue(functions[0].has_existing_acsl)
+            self.assertEqual(source[functions[0].start:functions[0].end], "int main(void) { return 0; }")
+
+    def test_dependency_check_requires_no_input_and_writes_no_output(self) -> None:
+        with mock.patch.object(sys, "argv", ["generate_acsl.py", "--check-dependencies"]), \
+             mock.patch.object(cli, "_load_libclang") as load, \
+             mock.patch.object(cli.shutil, "which", return_value="/tools/frama-c"), \
+             mock.patch.object(cli, "annotate_source") as annotate, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(cli.main(), 0)
+        load.assert_called_once_with()
+        annotate.assert_not_called()
+        self.assertIn("Dependencies available", output.getvalue())
+
+    def test_dependency_check_reports_missing_framac(self) -> None:
+        with mock.patch.object(sys, "argv", ["generate_acsl.py", "--check-dependencies"]), \
+             mock.patch.object(cli, "_load_libclang"), \
+             mock.patch.object(cli.shutil, "which", return_value=None), \
+             self.assertRaisesRegex(RuntimeError, "Frama-C was not found in PATH"):
+            cli.main()
+
     def test_loader_tries_available_candidates_and_caches_success(self) -> None:
         library = mock.Mock()
         with mock.patch.dict(os.environ, {}, clear=True), \
@@ -85,19 +117,6 @@ char *helper(void)
         functions = extract_functions(source)
         self.assertEqual([function.name for function in functions], ["main", "helper"])
         self.assertEqual(functions[1].return_type, "char *")
-
-    def test_strip_trailing_noise_removes_prompt_and_repairs_brace(self) -> None:
-        source = """/*@ requires \\true; */
-int main()
-{
-    if(1)
-    {
-        return 0;
-dev@host:~/repo$ 
-"""
-        cleaned = strip_trailing_noise(source)
-        self.assertNotIn("dev@host", cleaned)
-        self.assertTrue(cleaned.rstrip().endswith("}"))
 
     def test_static_inline_function_is_supported(self) -> None:
         source = """/*@ requires \\true; */

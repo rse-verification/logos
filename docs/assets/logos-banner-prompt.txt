@@ -1,0 +1,13 @@
+Generator: built-in image_gen tool
+Purpose: original LOGOS repository banner
+
+Use case: logo-brand
+Asset type: a polished wide GitHub repository banner for LOGOS, approximately 2:1 landscape.
+Primary request: create a distinctive academic software illustration expressing reason, an account of behavior, and logical function specifications for C. Make the picture useful as the visual identity of this research tool.
+Subject: an elegant geometric open specification document, with a C brace motif on one side and abstract logical notation on the other, connected by a few subtle neural nodes. The central mark should read well at small sizes.
+Style: refined editorial illustration, crisp shapes with restrained paper texture, thoughtful and professional, with plenty of breathing room.
+Composition: a balanced banner with a prominent LOGOS wordmark and the illustration. Use a light clean background and a restrained professional palette suitable for a GitHub README.
+Text (verbatim): "LOGOS"
+Secondary text (verbatim): "Logical specifications of function behavior"
+Constraints: exactly those two text lines; spell them correctly; no actual program source code or industrial examples; no third-party logos; no badges or claims that generated specifications guarantee correctness; no watermark; no mock browser frame. Create one final coherent banner, not a sheet of variations.
+

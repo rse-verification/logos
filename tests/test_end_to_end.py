@@ -34,6 +34,29 @@ int helper(int x)
 
 
 class EndToEndTest(unittest.TestCase):
+    def test_contract_breakouts_are_rejected_before_in_place_writes(self) -> None:
+        entries = (
+            "/*@ ensures \\result == 1; */\nint injected = 7;\n",
+            {"ensures": ["\\result == 1; */\nint injected = 7;\n/*@"]},
+        )
+        for entry in entries:
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as tmpdir:
+                source = pathlib.Path(tmpdir) / "input.c"
+                contracts = pathlib.Path(tmpdir) / "contracts.json"
+                source.write_text("/*@ assigns \\nothing; */\nint main(void) { return 0; }\nint helper(void) { return 1; }\n")
+                contracts.write_text(json.dumps({"contracts": {"helper": entry}}))
+                original_source = source.read_bytes()
+                original_contracts = contracts.read_bytes()
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "skill/scripts/generate_acsl.py"), str(source),
+                     "--contracts", str(contracts), "--in-place", "--no-verify-prompt"],
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("only ACSL annotations", result.stderr)
+                self.assertEqual(source.read_bytes(), original_source)
+                self.assertEqual(contracts.read_bytes(), original_contracts)
+
     def test_cli_handles_crlf_source_and_paths_with_spaces(self) -> None:
         with tempfile.TemporaryDirectory(prefix="logos path with spaces ") as tmpdir:
             directory = pathlib.Path(tmpdir)

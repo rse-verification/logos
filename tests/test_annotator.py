@@ -27,6 +27,36 @@ int helper()
 
 
 class AnnotatorTest(unittest.TestCase):
+    def test_raw_override_cannot_insert_executable_code(self) -> None:
+        contract = "/*@ ensures \\result == 1; */\nint injected = 7;\n"
+        with self.assertRaisesRegex(ValueError, "only ACSL annotations"):
+            annotate_source(SOURCE, {"helper": contract})
+
+    def test_line_contracts_on_definitions_and_prototypes_are_preserved(self) -> None:
+        for declaration in ("", "extern int main(void);\n"):
+            with self.subTest(prototype=bool(declaration)):
+                source = "//@ assigns \\nothing;\n//@ ensures \\result == 0;\n" + declaration
+                source += "int main(void) { return 0; }\nint helper(void) { return 1; }\n"
+                contract = "/*@ ensures \\result == 1; */\n"
+                result = annotate_source(source, {"helper": contract})
+                self.assertEqual(result.inserted_functions, ["helper"])
+                self.assertEqual(result.annotated_source, source.replace("int helper", contract + "int helper"))
+                with self.assertRaisesRegex(ValueError, "already have ACSL"):
+                    annotate_source(source, {"main": contract, "helper": contract})
+
+    def test_prompt_in_comment_and_final_whitespace_are_preserved(self) -> None:
+        source = "/*@ ensures \\result == 0; */\nint main(void) { return 0; }\n"
+        source += "/*\nDocumentation transcript:\ndev@host:~/repo$ build\n*/\n"
+        source += "int helper(void) { return 1; }\n\n  "
+        contract = "/*@ ensures \\result == 1; */\n"
+        result = annotate_source(source, {"helper": contract})
+        self.assertEqual(result.annotated_source, source.replace("int helper", contract + "int helper"))
+
+    def test_truncated_function_is_rejected_without_brace_repair(self) -> None:
+        source = "/*@ ensures \\result == 0; */\nint main(void) { return 0;\n"
+        with self.assertRaisesRegex(ValueError, "Unmatched function brace"):
+            annotate_source(source, {})
+
     def test_utf8_comments_preserve_insertion_positions(self) -> None:
         source = "/* café 日本語 */\n" + SOURCE.replace("    return 1;", "    /* naïve */ return 1;")
         contract = "/*@ assigns \\nothing; ensures \\result == 1; */\n"
