@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -17,6 +18,81 @@ from acsl_tool import cli, verification
 
 
 class VerificationTest(unittest.TestCase):
+    def test_cli_rejects_hardlinked_artifacts_before_any_write(self):
+        cases = ("source-output", "contracts-output", "source-report", "output-evidence", "source-legacy")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                directory = pathlib.Path(tmp)
+                source = directory / "input.c"
+                contracts = directory / "contracts.json"
+                output = directory / "output.c"
+                source.write_text("/*@ assigns \\nothing; */\nint main(void) { return 0; }\n")
+                contracts.write_text('{}\n')
+                output.write_text("existing output\n")
+                options = ["-o", str(output), "--contracts", str(contracts), "--no-verify-prompt"]
+                link_source, link_target = {
+                    "source-output": (source, output),
+                    "contracts-output": (contracts, output),
+                    "source-report": (source, output.with_suffix(".wp-report.txt")),
+                    "output-evidence": (output, directory / "evidence.json"),
+                    "source-legacy": (source, output.with_suffix(".llm-prompt.md")),
+                }[case]
+                link_target.unlink(missing_ok=True)
+                try:
+                    os.link(link_source, link_target)
+                except OSError as error:
+                    self.skipTest(f"Hard links unavailable on this filesystem: {error}")
+                if case == "output-evidence":
+                    options.extend(["--verify", "--verification-json", str(link_target)])
+                originals = {p: p.read_bytes() for p in directory.iterdir()}
+                with mock.patch.object(sys, "argv", ["generate_acsl.py", str(source), *options]), \
+                     self.assertRaisesRegex(ValueError, "must"):
+                    cli.main()
+                self.assertEqual({p: p.read_bytes() for p in directory.iterdir()}, originals)
+
+    def test_report_displays_final_metrics_matching_proof_decision(self):
+        output = "[wp] 1 goals scheduled\n[wp] Proved goals: 1 / 1\n"
+        output += "[wp] 2 goals scheduled\n[wp] Proved goals: 1 / 2\n"
+        report = verification.build_verification_report(["frama-c"], pathlib.Path("input.c"), 0, output)
+        self.assertEqual(report.proved_goals, "1 / 2")
+        self.assertEqual(report.goals_scheduled, "2")
+        self.assertEqual(report.verification_error, "WP proved 1 of 2 goals")
+        self.assertIn("Proved goals: 1 / 2", verification.format_full_report(report))
+
+    def test_cli_rejects_artifact_collisions_before_any_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = pathlib.Path(tmp)
+            source = directory / "input.c"
+            output = directory / "output.c"
+            source.write_text("/*@ assigns \\nothing; */\nint main(void) { return 0; }\n")
+            output.write_text("existing output\n")
+            cases = (
+                ["-o", str(source)],
+                ["-o", str(output), "--contracts", str(output)],
+                ["-o", str(output), "--contracts", str(output.with_suffix(".wp-report.txt"))],
+                ["-o", str(output), "--verify", "--verification-json", str(output)],
+                ["-o", str(output), "--contracts", str(output.with_suffix(".llm-contracts.template.json"))],
+            )
+            for options in cases:
+                with self.subTest(options=options):
+                    if "--contracts" in options:
+                        pathlib.Path(options[options.index("--contracts") + 1]).write_text('{}\n')
+                    originals = {p: p.read_bytes() for p in directory.iterdir()}
+                    with mock.patch.object(sys, "argv", ["generate_acsl.py", str(source), *options]), \
+                         self.assertRaisesRegex(ValueError, "must"):
+                        cli.main()
+                    self.assertEqual({p: p.read_bytes() for p in directory.iterdir()}, originals)
+
+    def test_cli_in_place_remains_an_explicit_supported_destination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = pathlib.Path(tmp) / "input.c"
+            original = "/*@ assigns \\nothing; */\nint main(void) { return 0; }\n\n "
+            source.write_text(original)
+            with mock.patch.object(sys, "argv", ["generate_acsl.py", str(source), "--in-place", "--no-verify-prompt"]), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(), 0)
+            self.assertEqual(source.read_text(), original)
+
     def test_wp_requires_complete_nonzero_goals(self):
         for stdout, process_code, passed in (
             ("[wp] Proved goals: 2 / 2\n", 0, True),

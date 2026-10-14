@@ -9,10 +9,44 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skill/scripts"))
 
-from acsl_tool.contracts import compute_source_sha256, load_contracts, validate_contract_bundle
+from acsl_tool.contracts import compute_source_sha256, load_contracts, normalize_contract, normalize_contract_entry, validate_contract_bundle
 
 
 class ContractsTest(unittest.TestCase):
+    def test_normalizer_accepts_only_annotation_forms_and_code_fences(self) -> None:
+        valid = (
+            "/*@ ensures \\result == 1; */",
+            "//@ assigns \\nothing;\n//@ ensures \\result == 1;",
+            "/*@ requires \\true; */\n/*@ ensures \\result == 1; */\n//@ assigns \\nothing;",
+            "ensures \\result == 1;",
+            "```acsl\n/*@ ensures \\result == 1; */\n```",
+            "```c\n//@ ensures \\result == 1;\n```",
+        )
+        for contract in valid:
+            with self.subTest(contract=contract):
+                normalized = normalize_contract(contract)
+                self.assertTrue(normalized.startswith(("/*@", "//@")))
+                self.assertTrue(normalized.endswith("\n"))
+                self.assertIn("\\result == 1", normalized)
+
+    def test_normalizer_rejects_executable_code_and_comment_escapes(self) -> None:
+        invalid = (
+            "/*@ ensures \\result == 1; */\nint injected = 7;\n",
+            "ensures \\result == 1; */\nint injected = 7;\n/*@",
+            "/*@ requires \\true;",
+            "//@ ensures \\result == 1; \\\n",
+            "/*@ ensures \\result == 1; *\\\n/ int injected = 7; /*@ assigns \\nothing; */",
+        )
+        for contract in invalid:
+            with self.subTest(contract=contract), self.assertRaises(ValueError):
+                normalize_contract(contract)
+
+    def test_structured_contract_fields_cannot_escape_annotations(self) -> None:
+        injection = "*/\nint injected = 7;\n/*@"
+        for field in ("comments", "requires", "assigns", "ensures", "raw"):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "only ACSL annotations"):
+                normalize_contract_entry({field: [injection]}, "contracts.helper")
+
     def test_loads_structured_contract_bundle_with_metadata(self) -> None:
         source = "/*@ requires \\true; */\nint main()\n{\n    return 0;\n}\n"
         payload = """{

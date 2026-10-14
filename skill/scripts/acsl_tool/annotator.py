@@ -6,7 +6,7 @@ import pathlib
 
 from .contracts import normalize_contract
 from .models import AnnotationResult, FunctionAnalysis
-from .parser import extract_functions, has_acsl, strip_trailing_noise
+from .parser import extract_functions, has_acsl
 
 
 def cleanup_legacy_llm_artifacts(output_path: pathlib.Path) -> None:
@@ -35,11 +35,10 @@ def annotate_source(
     source: str,
     contract_overrides: dict[str, str],
 ) -> AnnotationResult:
-    cleaned = strip_trailing_noise(source)
-    if not has_acsl(cleaned):
+    if not has_acsl(source):
         raise ValueError("Input file does not contain ACSL markers")
 
-    functions = extract_functions(cleaned)
+    functions = extract_functions(source)
     function_names = {function.name for function in functions}
     documented_function_names = {
         function.name for function in functions if function.has_existing_acsl
@@ -77,16 +76,16 @@ def annotate_source(
     inserted_functions: list[str] = []
     for analysis in analyses:
         function = analysis.function
-        chunks.append(cleaned[cursor : function.start])
+        chunks.append(source[cursor : function.start])
         if not analysis.has_existing_acsl:
             chunks.append(normalize_contract(contract_overrides[function.name]))
             inserted_functions.append(function.name)
-        chunks.append(cleaned[function.start : function.end])
+        chunks.append(source[function.start : function.end])
         cursor = function.end
-    chunks.append(cleaned[cursor:])
+    chunks.append(source[cursor:])
 
     return AnnotationResult(
-        annotated_source="".join(chunks).rstrip() + "\n",
+        annotated_source="".join(chunks),
         analyses=analyses,
         inserted_functions=inserted_functions,
     )

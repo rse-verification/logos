@@ -94,8 +94,29 @@ def normalize_contract(contract: str) -> str:
     stripped = re.sub(r"\s*```$", "", stripped)
     stripped = stripped.strip()
     if stripped.startswith("/*@") or stripped.startswith("//@"):
-        return stripped + ("\n" if not stripped.endswith("\n") else "")
-    return indent_block([line.rstrip() for line in stripped.splitlines() if line.strip()])
+        normalized = stripped + ("\n" if not stripped.endswith("\n") else "")
+    else:
+        normalized = indent_block([line.rstrip() for line in stripped.splitlines() if line.strip()])
+    if normalized.endswith(("\\\n", "\\\r\n")):
+        raise ValueError("Contract must not continue its final line into the source with a backslash")
+    # C removes backslash-newline pairs before recognizing comments. Check the
+    # resulting text so a split block terminator cannot expose executable C.
+    comment_text = re.sub(r"\\\r?\n", "", normalized)
+    offset = 0
+    while offset < len(comment_text):
+        if comment_text[offset].isspace():
+            offset += 1
+        elif comment_text.startswith("/*@", offset):
+            end = comment_text.find("*/", offset + 3)
+            if end == -1:
+                raise ValueError("Contract contains an unterminated ACSL block annotation")
+            offset = end + 2
+        elif comment_text.startswith("//@", offset):
+            end = comment_text.find("\n", offset + 3)
+            offset = len(comment_text) if end == -1 else end + 1
+        else:
+            raise ValueError("Contract text must contain only ACSL annotations and whitespace")
+    return normalized
 
 
 def expect_string_list(value: object, context: str) -> list[str]:
@@ -209,7 +230,7 @@ def render_structured_contract(spec: object, context: str) -> str:
 def normalize_contract_entry(contract: object, context: str) -> str:
     if isinstance(contract, str):
         return normalize_contract(contract)
-    return render_structured_contract(contract, context)
+    return normalize_contract(render_structured_contract(contract, context))
 
 
 def parse_contract_metadata(data: object) -> ContractMetadata | None:

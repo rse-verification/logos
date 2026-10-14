@@ -106,58 +106,6 @@ _LIBCLANG_CANDIDATES = (
 )
 
 
-def strip_trailing_noise(source: str) -> str:
-    prompt_match = re.search(r"(?m)^[A-Za-z0-9._-]+@[^$\n]+[$#] ", source)
-    if prompt_match:
-        source = source[: prompt_match.start()]
-    source = source.rstrip()
-    balance = 0
-    in_line_comment = False
-    in_block_comment = False
-    in_string = False
-    in_char = False
-    i = 0
-    while i < len(source):
-        ch = source[i]
-        nxt = source[i + 1] if i + 1 < len(source) else ""
-        if in_line_comment:
-            if ch == "\n":
-                in_line_comment = False
-        elif in_block_comment:
-            if ch == "*" and nxt == "/":
-                in_block_comment = False
-                i += 1
-        elif in_string:
-            if ch == "\\":
-                i += 1
-            elif ch == '"':
-                in_string = False
-        elif in_char:
-            if ch == "\\":
-                i += 1
-            elif ch == "'":
-                in_char = False
-        else:
-            if ch == "/" and nxt == "/":
-                in_line_comment = True
-                i += 1
-            elif ch == "/" and nxt == "*":
-                in_block_comment = True
-                i += 1
-            elif ch == '"':
-                in_string = True
-            elif ch == "'":
-                in_char = True
-            elif ch == "{":
-                balance += 1
-            elif ch == "}":
-                balance -= 1
-        i += 1
-    if balance > 0:
-        source = source + ("\n" + "}\n" * balance).rstrip()
-    return source.rstrip() + "\n"
-
-
 def has_acsl(source: str) -> bool:
     return "/*@" in source or "//@" in source
 
@@ -259,6 +207,9 @@ def _configure_libclang(lib: ctypes.CDLL) -> None:
         ctypes.POINTER(ctypes.c_uint),
     ]
     lib.clang_getExpansionLocation.restype = None
+
+    lib.clang_Location_isFromMainFile.argtypes = [CXSourceLocation]
+    lib.clang_Location_isFromMainFile.restype = ctypes.c_int
 
     lib.clang_getCString.argtypes = [CXString]
     lib.clang_getCString.restype = ctypes.c_char_p
@@ -364,7 +315,9 @@ def extract_functions(source: str) -> list[FunctionDef]:
         functions: list[FunctionDef] = []
         root = lib.clang_getTranslationUnitCursor(translation_unit)
         declarations = [cursor for cursor in _visit_children(lib, root)
-                        if _cursor_kind_name(lib, cursor) == "FunctionDecl"]
+                        if _cursor_kind_name(lib, cursor) == "FunctionDecl"
+                        and lib.clang_Location_isFromMainFile(
+                            lib.clang_getRangeStart(lib.clang_getCursorExtent(cursor)))]
 
         def text_offset(cursor: CXCursor) -> int:
             # Clang reports UTF-8 byte offsets; Python slices use character offsets.
@@ -408,6 +361,7 @@ def has_preceding_acsl(source: str, function_start: int) -> bool:
     annotation = extract_preceding_acsl(source, function_start)
     if annotation is None:
         return False
+    annotation = re.sub(r"(?m)^[ \t]*//@", "", annotation)
     annotation = re.sub(r"//[^\n]*", "", annotation)
     return bool(re.search(
         r"\b(?:requires|ensures|assigns|allocates|frees|terminates|decreases|behavior|complete|disjoint)\b",
@@ -418,6 +372,7 @@ def has_preceding_acsl(source: str, function_start: int) -> bool:
 def extract_preceding_acsl(source: str, function_start: int) -> str | None:
     prefix = source[:function_start]
     match = re.search(r"(/\*@(?:(?!\*/)[\s\S])*\*/)\s*$", prefix)
-    if match is None:
-        return None
-    return match.group(1)
+    if match is not None:
+        return match.group(1)
+    match = re.search(r"((?:^[ \t]*//@[^\n]*(?:\n|\Z))+)\s*\Z", prefix, re.MULTILINE)
+    return match.group(1) if match is not None else None
