@@ -4,7 +4,7 @@
 
 LOGOS supplies the contract-generation skill and verification wrapper used by
 AutoDeduct's [`llm-skill-mode` branch](https://github.com/rse-verification/auto-deduct/tree/llm-skill-mode).
-The compatible LOGOS changes are on `llm-host-runtime`.
+The compatible LOGOS changes are on `main`.
 
 Follow AutoDeduct's [LLM setup and usage guide](https://github.com/rse-verification/auto-deduct/blob/llm-skill-mode/docs/LLM.md)
 for host installation, the supported LOGOS revision, and Docker image builds.
@@ -54,9 +54,10 @@ extracts its skill into a temporary host cache, and gives that path to Codex.
 The wrapper runs from the same image ID. Users of a prepared image need no
 local LOGOS checkout or `--llm-skill` flag.
 
-Building that image from source still requires a LOGOS checkout as the named
-Docker build context. This is a build requirement, separate from the runtime
-requirements of someone using an already prepared image. Follow
+The standard `auto-deduct:latest` image includes LOGOS alongside Saida, ISP
+and TriCera. Its Dockerfile fetches a pinned LOGOS revision during the build;
+no separate host LOGOS checkout or extra image layer is needed. Run the standard
+image build from the AutoDeduct checkout on your host. Follow
 [AutoDeduct's image build instructions](https://github.com/rse-verification/auto-deduct/blob/llm-skill-mode/docs/LLM.md#build-the-verifier-image).
 
 ## Why the Launcher Runs on the Host
